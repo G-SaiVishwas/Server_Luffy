@@ -10,6 +10,14 @@ const app = express();
 app.use(cors()); // Enable CORS for all requests
 app.use(express.json()); // To parse incoming JSON requests
 
+//temprary
+const corsOptions = {
+    origin: 'https://g-saivishwas.github.io/Luffy_website/',
+    methods: 'GET,POST',
+    allowedHeaders: 'Content-Type',
+};
+app.use(cors(corsOptions));
+
 // Load API key from environment variables
 const apiKey = process.env.GEMINI_API_KEY;
 const genAI = new GoogleGenerativeAI(apiKey);
