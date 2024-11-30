@@ -45,8 +45,12 @@ app.post('/chat', async (req, res) => {
 
         // Send the user message and get a response
         const result = await chatSession.sendMessage(userMessage);
-        console.log(result); // Log the result for debugging
-        return res.json({ botResponse: result.response.text() });
+
+        // Fix: Call the `text` function to get the actual response text
+        const botResponse = await result.response.text();  // Call the function to get the text response
+        
+        console.log(botResponse); // Log the response for debugging
+        return res.json({ botResponse });  // Return the response to the frontend
     } catch (error) {
         console.error('Error processing message:', error.message); // Log detailed error
         return res.status(500).json({
