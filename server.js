@@ -18,8 +18,11 @@ const apiKey = process.env.GEMINI_API_KEY;
 const genAI = new GoogleGenerativeAI(apiKey);
 
 // Chat endpoint
-app.post('/chat', async (req, res) => {
-  const { userMessage } = req.body;
+app.post('/chat', (req, res) => {
+    const userMessage = req.body.userMessage;
+    res.json({ botResponse: `You said: ${userMessage}` });
+});
+
 
   if (!userMessage) {
     return res.status(400).send('No message provided');
