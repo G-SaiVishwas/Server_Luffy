@@ -1,22 +1,17 @@
 require('dotenv').config();
 const express = require('express');
-const cors = require('cors'); // Import cors after express
+const cors = require('cors');
+app.use(cors()); // Allow all origins
+
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 // Initialize app
 const app = express();
 
 // Enable CORS and JSON parsing middleware
-app.use(cors()); // Enable CORS for all requests
 app.use(express.json()); // To parse incoming JSON requests
 
-//temprary
-const corsOptions = {
-    origin: 'https://g-saivishwas.github.io/Luffy_website/',
-    methods: 'GET,POST',
-    allowedHeaders: 'Content-Type',
-};
-app.use(cors(corsOptions));
+
 
 // Load API key from environment variables
 const apiKey = process.env.GEMINI_API_KEY;
