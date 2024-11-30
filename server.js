@@ -1,6 +1,6 @@
 const express = require("express");
 const session = require("express-session");
-const RedisStore = require("connect-redis")(session);
+const RedisStore = require("connect-redis").default; // Updated for modern connect-redis
 const Redis = require("ioredis");
 const cors = require("cors");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
