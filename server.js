@@ -1,69 +1,43 @@
-require('dotenv').config();
-const express = require('express');
-const cors = require('cors');
+const express = require("express");
+const cors = require("cors");
+require("dotenv").config(); // Load environment variables from .env
 
-app.use(
-    cors({
-        origin: 'https://g-saivishwas.github.io/Luffy_website/', // Allow requests from your GitHub Pages site
-        methods: ['GET', 'POST'], // Allow the methods you need
-        credentials: true, // If cookies or authentication headers are involved
-    })
-);
-
-const { GoogleGenerativeAI } = require('@google/generative-ai');
-
-// Initialize app
 const app = express();
+const PORT = process.env.PORT || 5000;
 
-// Enable CORS and JSON parsing middleware
-app.use(express.json()); // To parse incoming JSON requests
-//temporary
+// Middleware
+app.use(cors({
+    origin: "https://g-saivishwas.github.io", // Replace with your frontend's actual URL
+    methods: ["GET", "POST"], // Specify allowed methods
+    allowedHeaders: ["Content-Type"] // Specify allowed headers
+}));
+app.use(express.json()); // Parse incoming JSON payloads
 
-
-
-
-
-// Load API key from environment variables
-const apiKey = process.env.GEMINI_API_KEY;
-const genAI = new GoogleGenerativeAI(apiKey);
-
-// Chat endpoint
-app.post('/chat', (req, res) => {
-    const userMessage = req.body.userMessage;
-    res.json({ botResponse: `You said: ${userMessage}` });
+// Simple route for health check
+app.get("/", (req, res) => {
+    res.send("Server is up and running!");
 });
 
+// Chat endpoint
+app.post("/chat", async (req, res) => {
+    try {
+        const { userMessage } = req.body;
 
-  if (!userMessage) {
-    return res.status(400).send('No message provided');
-  }
+        if (!userMessage) {
+            return res.status(400).json({ error: "User message is required." });
+        }
 
-  try {
-    const model = genAI.getGenerativeModel({
-      model: 'gemini-1.5-flash',
-      systemInstruction: 'You are now embodying the character Monkey D. Luffy...',
-    });
+        // Simulate a response from your chat logic
+        const reply = `You said: ${userMessage}`; // Replace with your chat logic
 
-    const chatSession = model.startChat({
-      generationConfig: {
-        temperature: 1.75,
-        topP: 0.95,
-        topK: 40,
-        maxOutputTokens: 8192,
-        responseMimeType: 'text/plain',
-      },
-    });
-
-    const result = await chatSession.sendMessage(userMessage);
-    return res.json({ botResponse: result.response.text() });
-  } catch (error) {
-    console.error('Error processing request:', error.message, error.stack);
-    return res.status(500).send('Error processing your request');
-  }
+        res.json({ reply });
+    } catch (error) {
+        console.error("Error handling /chat request:", error);
+        res.status(500).json({ error: "Internal server error." });
+    }
 });
 
 // Start the server
-const port = process.env.PORT || 5000;
-app.listen(port, () => {
-    console.log(`Server running on port ${port}`);
+app.listen(PORT, () => {
+    console.log(`Server is running on http://localhost:${PORT}`);
 });
