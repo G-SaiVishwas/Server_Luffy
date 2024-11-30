@@ -1,7 +1,14 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-app.use(cors()); // Allow all origins
+
+app.use(
+    cors({
+        origin: 'https://g-saivishwas.github.io/Luffy_website/', // Allow requests from your GitHub Pages site
+        methods: ['GET', 'POST'], // Allow the methods you need
+        credentials: true, // If cookies or authentication headers are involved
+    })
+);
 
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
@@ -10,6 +17,9 @@ const app = express();
 
 // Enable CORS and JSON parsing middleware
 app.use(express.json()); // To parse incoming JSON requests
+//temporary
+
+
 
 
 
