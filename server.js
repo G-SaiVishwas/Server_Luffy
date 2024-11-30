@@ -1,43 +1,29 @@
 const express = require("express");
 const cors = require("cors");
-require("dotenv").config(); // Load environment variables from .env
-
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 10000;
 
-// Middleware
-app.use(cors({
-    origin: "https://g-saivishwas.github.io/Luffy_website/", // Replace with your frontend's actual URL
-    methods: ["GET", "POST"], // Specify allowed methods
-    allowedHeaders: ["Content-Type"] // Specify allowed headers
-}));
-app.use(express.json()); // Parse incoming JSON payloads
+// Configure CORS to allow requests from your GitHub Pages domain
+const corsOptions = {
+    origin: "https://g-saivishwas.github.io/Luffy_website/", // Your exact GitHub Pages origin
+    methods: ["GET", "POST"],
+    allowedHeaders: ["Content-Type"],
+};
+app.use(cors(corsOptions));
 
-// Simple route for health check
-app.get("/", (req, res) => {
-    res.send("Server is up and running!");
-});
+app.use(express.json());
 
-// Chat endpoint
+// Sample route
 app.post("/chat", async (req, res) => {
-    try {
-        const { userMessage } = req.body;
+    const userMessage = req.body.userMessage;
+    console.log("Received message:", userMessage);
 
-        if (!userMessage) {
-            return res.status(400).json({ error: "User message is required." });
-        }
-
-        // Simulate a response from your chat logic
-        const reply = `You said: ${userMessage}`; // Replace with your chat logic
-
-        res.json({ reply });
-    } catch (error) {
-        console.error("Error handling /chat request:", error);
-        res.status(500).json({ error: "Internal server error." });
-    }
+    // Simulating a reply
+    const reply = `Hello! You said: "${userMessage}"`;
+    res.json({ reply });
 });
 
 // Start the server
 app.listen(PORT, () => {
-    console.log(`Server is running on http://localhost:${PORT}`);
+    console.log(`Server is running on port ${PORT}`);
 });
