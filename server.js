@@ -40,12 +40,7 @@ app.post('/chat', async (req, res) => {
             details: error.message,
         });
     }
-});
 
-
-    const reply = `Server says: You sent "${userMessage}"`;
-    res.json({ reply });
-});
 
 app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
