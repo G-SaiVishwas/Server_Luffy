@@ -7,7 +7,7 @@ const PORT = process.env.PORT || 5000;
 
 // Middleware
 app.use(cors({
-    origin: "https://g-saivishwas.github.io", // Replace with your frontend's actual URL
+    origin: "https://g-saivishwas.github.io/Luffy_website/", // Replace with your frontend's actual URL
     methods: ["GET", "POST"], // Specify allowed methods
     allowedHeaders: ["Content-Type"] // Specify allowed headers
 }));
