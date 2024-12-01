@@ -1,10 +1,19 @@
 const express = require("express");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
-const app = express();
-const PORT = process.env.PORT || 5000;
+const cors = require('cors');
+const dotenv = require('dotenv');
 
-// Initialize Google Generative AI (using Gemini API)
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+// Load environment variables from .env file
+dotenv.config();
+
+
+const app = express();
+app.use(express.json());
+const PORT = process.env.PORT || 6969;  // Use environment variable or default to 6969
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);  // Use Gemini API key from .env
+
+// Enable CORS
+app.use(cors());
 
 // Generate a unique session ID
 function generateSessionId() {
