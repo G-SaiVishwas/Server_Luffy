@@ -1,8 +1,5 @@
 const express = require("express");
 const cors = require("cors");
-const session = require("express-session");
-const Redis = require("ioredis");
-const connectRedis = require("connect-redis");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 const app = express();
@@ -12,61 +9,37 @@ const PORT = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json());
 
-// Redis setup for session storage
-const redisClient = new Redis({
-    host: process.env.REDIS_HOST || "127.0.0.1",
-    port: process.env.REDIS_PORT || 6379,
-    password: process.env.REDIS_PASSWORD || null,
-});
-
-// Create Redis store
-const RedisStore = connectRedis(session);
-
-// Session middleware using Redis for session storage
-app.use(
-    session({
-        store: new RedisStore({ client: redisClient }),
-        secret: process.env.SESSION_SECRET || "your-session-secret",
-        resave: false,
-        saveUninitialized: false,
-        cookie: {
-            secure: process.env.NODE_ENV === "production",
-            httpOnly: true,
-            maxAge: 1000 * 60 * 60 * 24, // 24 hours
-        },
-    })
-);
-
 // Initialize Google Generative AI
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
 
-// Function to save chat history to session
-function saveChatHistory(req, chatHistory) {
-    req.session.chatHistory = chatHistory;
-    req.session.save();
-}
+// In-memory conversation storage
+const conversationContexts = new Map();
 
-// Function to retrieve chat history from session
-function getChatHistory(req) {
-    return req.session.chatHistory || [];
+// Generate a unique session ID
+function generateSessionId() {
+    return Math.random().toString(36).substring(2, 15) + 
+           Math.random().toString(36).substring(2, 15);
 }
 
 // Chat endpoint with conversation memory
 app.post('/chat', async (req, res) => {
-    const { userMessage } = req.body;
+    const { userMessage, sessionId } = req.body;
+    
+    // Generate or use existing session ID
+    const currentSessionId = sessionId || generateSessionId();
     
     if (!userMessage) {
         return res.status(400).json({ error: 'No message provided' });
     }
 
     try {
-        // Retrieve existing chat history
-        const chatHistory = getChatHistory(req);
+        // Retrieve existing chat history for this session
+        const chatHistory = conversationContexts.get(currentSessionId) || [];
 
         // Prepare the model with system instruction and conversation context
         const model = genAI.getGenerativeModel({
             model: 'gemini-1.5-flash',
-            systemInstruction: "You are now embodying the character Monkey D. Luffy from One Piece. Respond in his energetic, adventurous, and straightforward style.",
+            systemInstruction: "You are Monkey D. Luffy from One Piece. Respond in an energetic, adventurous, and straightforward style. Keep responses short and true to Luffy's character.",
         });
 
         // Start chat session with full context
@@ -77,7 +50,6 @@ app.post('/chat', async (req, res) => {
                 topP: 0.95,
                 topK: 40,
                 maxOutputTokens: 8192,
-                responseMimeType: 'text/plain',
             },
         });
 
@@ -85,17 +57,23 @@ app.post('/chat', async (req, res) => {
         const result = await chatSession.sendMessage(userMessage);
         const botResponse = result.response.text();
 
-        // Update and save chat history
+        // Update conversation history
         const updatedChatHistory = [
             ...chatHistory,
             { role: "user", parts: [{ text: userMessage }] },
             { role: "model", parts: [{ text: botResponse }] }
         ];
-        saveChatHistory(req, updatedChatHistory);
+
+        // Limit history to last 10 messages to prevent memory issues
+        const limitedChatHistory = updatedChatHistory.slice(-10);
+        
+        // Store updated history
+        conversationContexts.set(currentSessionId, limitedChatHistory);
 
         return res.json({ 
             botResponse: botResponse,
-            chatHistoryLength: updatedChatHistory.length
+            sessionId: currentSessionId,
+            chatHistoryLength: limitedChatHistory.length
         });
     } catch (error) {
         console.error('Server Error:', error.message);
@@ -108,19 +86,18 @@ app.post('/chat', async (req, res) => {
 
 // Clear chat history endpoint
 app.post('/clear-history', (req, res) => {
-    req.session.chatHistory = [];
-    req.session.save();
+    const { sessionId } = req.body;
+    
+    if (sessionId) {
+        conversationContexts.delete(sessionId);
+    }
+    
     res.json({ message: 'Chat history cleared' });
 });
 
 // Root endpoint for health check
 app.get("/", (req, res) => {
     res.send("Luffy Chatbot Server is up and running!");
-});
-
-// Error handling for Redis connection
-redisClient.on('error', (err) => {
-    console.error('Redis Client Error:', err);
 });
 
 // Start the server
