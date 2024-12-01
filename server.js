@@ -2,7 +2,7 @@ const express = require("express");
 const cors = require("cors");
 const session = require("express-session");
 const Redis = require("ioredis");
-const RedisStore = require("connect-redis")(session); // Correct import and initialization
+const connectRedis = require("connect-redis");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 const app = express();
@@ -18,6 +18,9 @@ const redisClient = new Redis({
     port: process.env.REDIS_PORT || 6379,
     password: process.env.REDIS_PASSWORD || null,
 });
+
+// Create Redis store
+const RedisStore = connectRedis(session);
 
 // Session middleware using Redis for session storage
 app.use(
