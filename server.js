@@ -1,7 +1,6 @@
 const express = require("express");
 const cors = require("cors");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
-
 const app = express();
 const PORT = process.env.PORT || 5000;
 
@@ -12,9 +11,6 @@ app.use(express.json());
 // Initialize Google Generative AI
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-// In-memory conversation storage
-const conversationContexts = new Map();
-
 // Generate a unique session ID
 function generateSessionId() {
     return Math.random().toString(36).substring(2, 15) + 
@@ -23,7 +19,7 @@ function generateSessionId() {
 
 // Chat endpoint with conversation memory
 app.post('/chat', async (req, res) => {
-    const { userMessage, sessionId } = req.body;
+    const { userMessage, sessionId, conversationHistory } = req.body;
     
     // Generate or use existing session ID
     const currentSessionId = sessionId || generateSessionId();
@@ -33,18 +29,18 @@ app.post('/chat', async (req, res) => {
     }
 
     try {
-        // Retrieve existing chat history for this session
-        const chatHistory = conversationContexts.get(currentSessionId) || [];
-
-        // Prepare the model with system instruction and conversation context
+        // Prepare the model with system instruction
         const model = genAI.getGenerativeModel({
             model: 'gemini-1.5-flash',
             systemInstruction: "You are Monkey D. Luffy from One Piece. Respond in an energetic, adventurous, and straightforward style. Keep responses short and true to Luffy's character.",
         });
 
+        // Prepare chat history (use existing or start new)
+        const existingHistory = conversationHistory || [];
+
         // Start chat session with full context
         const chatSession = model.startChat({
-            history: chatHistory,
+            history: existingHistory,
             generationConfig: {
                 temperature: 1.75,
                 topP: 0.95,
@@ -58,22 +54,25 @@ app.post('/chat', async (req, res) => {
         const botResponse = result.response.text();
 
         // Update conversation history
-        const updatedChatHistory = [
-            ...chatHistory,
-            { role: "user", parts: [{ text: userMessage }] },
-            { role: "model", parts: [{ text: botResponse }] }
+        const updatedConversationHistory = [
+            ...existingHistory,
+            { 
+                sender: 'user', 
+                text: userMessage 
+            },
+            { 
+                sender: 'bot', 
+                text: botResponse 
+            }
         ];
 
-        // Limit history to last 10 messages to prevent memory issues
-        const limitedChatHistory = updatedChatHistory.slice(-10);
-        
-        // Store updated history
-        conversationContexts.set(currentSessionId, limitedChatHistory);
+        // Limit history to last 10 messages
+        const limitedConversationHistory = updatedConversationHistory.slice(-10);
 
         return res.json({ 
             botResponse: botResponse,
             sessionId: currentSessionId,
-            chatHistoryLength: limitedChatHistory.length
+            conversationHistory: limitedConversationHistory
         });
     } catch (error) {
         console.error('Server Error:', error.message);
@@ -88,10 +87,7 @@ app.post('/chat', async (req, res) => {
 app.post('/clear-history', (req, res) => {
     const { sessionId } = req.body;
     
-    if (sessionId) {
-        conversationContexts.delete(sessionId);
-    }
-    
+    // In this implementation, session clearing is handled client-side
     res.json({ message: 'Chat history cleared' });
 });
 
