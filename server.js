@@ -2,56 +2,82 @@ const express = require("express");
 const cors = require("cors");
 const session = require("express-session");
 const Redis = require("ioredis");
-const connectRedis = require("connect-redis"); // Correctly import connect-redis
+const connectRedis = require("connect-redis");
+const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Allow all origins for CORS
+// Middleware
 app.use(cors());
 app.use(express.json());
 
 // Redis setup for session storage
 const redisClient = new Redis({
-    host: process.env.REDIS_HOST || "127.0.0.1", // Replace with your Redis host
-    port: process.env.REDIS_PORT || 6379, // Default Redis port
-    password: process.env.REDIS_PASSWORD || null, // Optional: if Redis is password protected
+    host: process.env.REDIS_HOST || "127.0.0.1",
+    port: process.env.REDIS_PORT || 6379,
+    password: process.env.REDIS_PASSWORD || null,
 });
 
-// Create the RedisStore with the correct import syntax
-const RedisStore = connectRedis(session); // Here, connectRedis is passed to session to create the store
+// Create the RedisStore
+const RedisStore = connectRedis(session);
 
 // Session middleware using Redis for session storage
 app.use(
     session({
-        store: new RedisStore({ client: redisClient }), // Use Redis store with the Redis client
-        secret: process.env.SESSION_SECRET || "your-session-secret", // Replace with your session secret
+        store: new RedisStore({ client: redisClient }),
+        secret: process.env.SESSION_SECRET || "your-session-secret",
         resave: false,
         saveUninitialized: false,
         cookie: {
-            secure: process.env.NODE_ENV === "production", // Secure cookie in production
-            httpOnly: true, // Set the cookie to HTTP only
+            secure: process.env.NODE_ENV === "production",
+            httpOnly: true,
             maxAge: 1000 * 60 * 60 * 24, // 24 hours
         },
     })
 );
 
-// Example API route that uses sessions and handles errors
+// Initialize Google Generative AI
+const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
+
+// Function to save chat history to session
+function saveChatHistory(req, chatHistory) {
+    req.session.chatHistory = chatHistory;
+    req.session.save();
+}
+
+// Function to retrieve chat history from session
+function getChatHistory(req) {
+    return req.session.chatHistory || [];
+}
+
+// Chat endpoint with conversation memory
 app.post('/chat', async (req, res) => {
     const { userMessage } = req.body;
-
+    
     if (!userMessage) {
-        return res.status(400).json({ error: 'No message provided' }); // Handle invalid input
+        return res.status(400).json({ error: 'No message provided' });
     }
 
     try {
-        // AI model handling (this is where you'd integrate the AI generation code)
+        // Retrieve existing chat history
+        const chatHistory = getChatHistory(req);
+
+        // Prepare the model with system instruction and conversation context
         const model = genAI.getGenerativeModel({
             model: 'gemini-1.5-flash',
-            systemInstruction: "You are now embodying the character Monkey D. Luffy...",
+            systemInstruction: "You are now embodying the character Monkey D. Luffy from One Piece. Respond in his energetic, adventurous, and straightforward style.",
         });
 
+        // Construct the full conversation context
+        const conversationContext = [
+            ...chatHistory,
+            { role: "user", parts: [{ text: userMessage }] }
+        ];
+
+        // Start chat session with full context
         const chatSession = model.startChat({
+            history: chatHistory,
             generationConfig: {
                 temperature: 1.75,
                 topP: 0.95,
@@ -61,9 +87,22 @@ app.post('/chat', async (req, res) => {
             },
         });
 
+        // Send message and get response
         const result = await chatSession.sendMessage(userMessage);
-        return res.json({ botResponse: result.response.text() }); // Send back response from bot
+        const botResponse = result.response.text();
 
+        // Update and save chat history
+        const updatedChatHistory = [
+            ...chatHistory,
+            { role: "user", parts: [{ text: userMessage }] },
+            { role: "model", parts: [{ text: botResponse }] }
+        ];
+        saveChatHistory(req, updatedChatHistory);
+
+        return res.json({ 
+            botResponse: botResponse,
+            chatHistoryLength: updatedChatHistory.length
+        });
     } catch (error) {
         console.error('Server Error:', error.message);
         return res.status(500).json({
@@ -73,9 +112,16 @@ app.post('/chat', async (req, res) => {
     }
 });
 
-// Root endpoint for health check or debugging
+// Clear chat history endpoint
+app.post('/clear-history', (req, res) => {
+    req.session.chatHistory = [];
+    req.session.save();
+    res.json({ message: 'Chat history cleared' });
+});
+
+// Root endpoint for health check
 app.get("/", (req, res) => {
-    res.send("Server is up and running!");
+    res.send("Luffy Chatbot Server is up and running!");
 });
 
 // Start the server
