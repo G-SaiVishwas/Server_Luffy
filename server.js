@@ -2,7 +2,7 @@ const express = require("express");
 const cors = require("cors");
 const session = require("express-session");
 const Redis = require("ioredis");
-const connectRedis = require("connect-redis");
+const RedisStore = require("connect-redis")(session); // Correct import and initialization
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 const app = express();
@@ -18,9 +18,6 @@ const redisClient = new Redis({
     port: process.env.REDIS_PORT || 6379,
     password: process.env.REDIS_PASSWORD || null,
 });
-
-// Create the RedisStore
-const RedisStore = connectRedis(session);
 
 // Session middleware using Redis for session storage
 app.use(
@@ -69,12 +66,6 @@ app.post('/chat', async (req, res) => {
             systemInstruction: "You are now embodying the character Monkey D. Luffy from One Piece. Respond in his energetic, adventurous, and straightforward style.",
         });
 
-        // Construct the full conversation context
-        const conversationContext = [
-            ...chatHistory,
-            { role: "user", parts: [{ text: userMessage }] }
-        ];
-
         // Start chat session with full context
         const chatSession = model.startChat({
             history: chatHistory,
@@ -122,6 +113,11 @@ app.post('/clear-history', (req, res) => {
 // Root endpoint for health check
 app.get("/", (req, res) => {
     res.send("Luffy Chatbot Server is up and running!");
+});
+
+// Error handling for Redis connection
+redisClient.on('error', (err) => {
+    console.error('Redis Client Error:', err);
 });
 
 // Start the server
