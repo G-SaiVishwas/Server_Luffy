@@ -12,15 +12,15 @@ app.use(express.json());
 // Initialize Firebase Admin SDK using the GOOGLE_APPLICATION_CREDENTIALS environment variable
 if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
     admin.initializeApp({
-        credential: admin.credential.applicationDefault(),
-        databaseURL: process.env.FIREBASE_DATABASE_URL,
+        credential: admin.credential.applicationDefault(), // Automatically picks up the service account file
+        databaseURL: process.env.FIREBASE_DATABASE_URL, // Ensure this environment variable is set
     });
 } else {
     console.error('GOOGLE_APPLICATION_CREDENTIALS environment variable is not set.');
     process.exit(1);
 }
 
-// Initialize Google Generative AI
+// Initialize Google Generative AI (using Gemini API)
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 // Generate a unique session ID
