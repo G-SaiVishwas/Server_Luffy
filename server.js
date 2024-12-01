@@ -10,7 +10,7 @@ app.use(cors());
 app.use(express.json());
 
 // Initialize Google Generative AI
-const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 // In-memory conversation storage
 const conversationContexts = new Map();
