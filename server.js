@@ -1,61 +1,55 @@
 const express = require("express");
 const cors = require("cors");
-const { GoogleGenerativeAI } = require("@google/generative-ai");
+const { Firestore } = require("@google-cloud/firestore");
+
 const app = express();
 const PORT = process.env.PORT || 5000;
+
+// Initialize Firestore
+const firestore = new Firestore();
 
 app.use(cors());
 app.use(express.json());
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+async function getUserData(userId) {
+    const userDoc = firestore.collection("users").doc(userId);
+    const userSnapshot = await userDoc.get();
+    return userSnapshot.exists ? userSnapshot.data() : null;
+}
 
-function generateSessionId() {
-    return Math.random().toString(36).substring(2, 15) + 
-           Math.random().toString(36).substring(2, 15);
+async function updateUserData(userId, data) {
+    const userDoc = firestore.collection("users").doc(userId);
+    await userDoc.set(data, { merge: true });
 }
 
 app.post("/chat", async (req, res) => {
-    const { userMessage, sessionId, conversationHistory, userInfo } = req.body;
-    const currentSessionId = sessionId || generateSessionId();
+    const { userId, userMessage } = req.body;
 
-    if (!userMessage) return res.status(400).json({ error: "No message provided" });
+    if (!userId || !userMessage) {
+        return res.status(400).json({ error: "Invalid request data" });
+    }
 
     try {
-        const systemInstruction = userInfo?.name
-            ? `You are Monkey D. Luffy. Speak energetically and remember ${userInfo.name}.`
-            : "You are Monkey D. Luffy. Speak energetically.";
-        
-        const model = genAI.getGenerativeModel({ 
-            model: "gemini-1.5-flash", 
-            systemInstruction 
-        });
+        let userData = await getUserData(userId);
 
-        const contextHistory = conversationHistory.slice(-10).map((entry) => ({
-            role: entry.sender === "user" ? "user" : "model",
-            parts: [{ text: entry.text }],
-        }));
+        if (!userData) {
+            userData = { userId, name: null, conversationHistory: [] };
+            await updateUserData(userId, userData);
+        }
 
-        const chatSession = model.startChat({
-            history: contextHistory,
-            generationConfig: {
-                temperature: 1.75,
-                topP: 0.95,
-                topK: 40,
-                maxOutputTokens: 8192,
-            },
-        });
+        userData.conversationHistory.push({ sender: "user", text: userMessage });
 
-        const result = await chatSession.sendMessage(userMessage);
-        return res.json({
-            botResponse: result.response.text(),
-            sessionId: currentSessionId,
-        });
+        // Simulate a bot response
+        const botResponse = `Hello ${userData.name || "there"}, you said: ${userMessage}`;
+        userData.conversationHistory.push({ sender: "bot", text: botResponse });
+
+        await updateUserData(userId, userData);
+
+        res.json({ botResponse });
     } catch (error) {
-        console.error("Error:", error.message);
-        return res.status(500).json({ error: "Internal server error" });
+        console.error("Error:", error);
+        res.status(500).json({ error: "Internal server error" });
     }
 });
 
-app.get("/", (req, res) => res.send("Server is running!"));
-
-app.listen(PORT, () => console.log(`Server listening on port ${PORT}`));
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
