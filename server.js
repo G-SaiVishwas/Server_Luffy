@@ -17,9 +17,9 @@ function generateSessionId() {
            Math.random().toString(36).substring(2, 15);
 }
 
-// Chat endpoint with conversation memory
+// Chat endpoint with full conversation memory
 app.post('/chat', async (req, res) => {
-    const { userMessage, sessionId, conversationHistory } = req.body;
+    const { userMessage, sessionId, conversationHistory, userInfo } = req.body;
     
     // Generate or use existing session ID
     const currentSessionId = sessionId || generateSessionId();
@@ -29,18 +29,28 @@ app.post('/chat', async (req, res) => {
     }
 
     try {
-        // Prepare the model with system instruction
+        // Prepare dynamic system instruction
+        const systemInstruction = userInfo && userInfo.name 
+            ? `You are Monkey D. Luffy from One Piece. You are talking to ${userInfo.name}. Respond in an energetic, adventurous, and straightforward style. Always remember the user's name and context of previous conversations.`
+            : "You are Monkey D. Luffy from One Piece. Respond in an energetic, adventurous, and straightforward style. Keep responses short and true to Luffy's character.";
+
         const model = genAI.getGenerativeModel({
             model: 'gemini-1.5-flash',
-            systemInstruction: "You are Monkey D. Luffy from One Piece. Respond in an energetic, adventurous, and straightforward style. Keep responses short and true to Luffy's character.",
+            systemInstruction: systemInstruction,
         });
 
-        // Prepare chat history (use existing or start new)
+        // Prepare chat history
         const existingHistory = conversationHistory || [];
+
+        // Slice last 10 messages for context to manage token limit
+        const contextHistory = existingHistory.slice(-10).map(entry => ({
+            role: entry.sender === 'user' ? 'user' : 'model',
+            parts: [{ text: entry.text }]
+        }));
 
         // Start chat session with full context
         const chatSession = model.startChat({
-            history: existingHistory,
+            history: contextHistory,
             generationConfig: {
                 temperature: 1.75,
                 topP: 0.95,
@@ -53,26 +63,9 @@ app.post('/chat', async (req, res) => {
         const result = await chatSession.sendMessage(userMessage);
         const botResponse = result.response.text();
 
-        // Update conversation history
-        const updatedConversationHistory = [
-            ...existingHistory,
-            { 
-                sender: 'user', 
-                text: userMessage 
-            },
-            { 
-                sender: 'bot', 
-                text: botResponse 
-            }
-        ];
-
-        // Limit history to last 10 messages
-        const limitedConversationHistory = updatedConversationHistory.slice(-10);
-
         return res.json({ 
             botResponse: botResponse,
-            sessionId: currentSessionId,
-            conversationHistory: limitedConversationHistory
+            sessionId: currentSessionId
         });
     } catch (error) {
         console.error('Server Error:', error.message);
@@ -81,14 +74,6 @@ app.post('/chat', async (req, res) => {
             details: error.message,
         });
     }
-});
-
-// Clear chat history endpoint
-app.post('/clear-history', (req, res) => {
-    const { sessionId } = req.body;
-    
-    // In this implementation, session clearing is handled client-side
-    res.json({ message: 'Chat history cleared' });
 });
 
 // Root endpoint for health check
