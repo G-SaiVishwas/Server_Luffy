@@ -20,6 +20,9 @@ if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
     process.exit(1);
 }
 
+// Initialize Firestore
+const db = admin.firestore();
+
 // Initialize Google Generative AI (using Gemini API)
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
@@ -29,9 +32,50 @@ function generateSessionId() {
            Math.random().toString(36).substring(2, 15);
 }
 
+// Save conversation to Firestore
+async function saveConversationToFirestore(sessionId, userMessage, botResponse) {
+    const conversationRef = db.collection("conversations").doc(sessionId);
+    const conversationDoc = await conversationRef.get();
+
+    if (!conversationDoc.exists) {
+        await conversationRef.set({
+            history: []
+        });
+    }
+
+    const history = conversationDoc.exists ? conversationDoc.data().history : [];
+
+    // Add new message to the history
+    history.push({
+        sender: "user",
+        text: userMessage,
+    });
+    history.push({
+        sender: "bot",
+        text: botResponse,
+    });
+
+    // Update conversation history in Firestore
+    await conversationRef.update({
+        history: history
+    });
+}
+
+// Retrieve full conversation history from Firestore
+async function getFullConversationHistory(sessionId) {
+    const conversationRef = db.collection("conversations").doc(sessionId);
+    const conversationDoc = await conversationRef.get();
+
+    if (!conversationDoc.exists) {
+        return [];
+    }
+
+    return conversationDoc.data().history;
+}
+
 // Chat endpoint with full conversation memory
 app.post('/chat', async (req, res) => {
-    const { userMessage, sessionId, conversationHistory, userInfo } = req.body;
+    const { userMessage, sessionId, userInfo } = req.body;
     
     // Generate or use existing session ID
     const currentSessionId = sessionId || generateSessionId();
@@ -41,6 +85,9 @@ app.post('/chat', async (req, res) => {
     }
 
     try {
+        // Retrieve full conversation history from Firestore
+        const conversationHistory = await getFullConversationHistory(currentSessionId);
+
         // Prepare dynamic system instruction
         const systemInstruction = userInfo && userInfo.name 
             ? `You are Monkey D. Luffy from One Piece. You are talking to ${userInfo.name}. Respond in an energetic, adventurous, and straightforward style. Always remember the user's name and context of previous conversations.`
@@ -51,11 +98,8 @@ app.post('/chat', async (req, res) => {
             systemInstruction: systemInstruction,
         });
 
-        // Prepare chat history
-        const existingHistory = conversationHistory || [];
-
-        // Slice last 10 messages for context to manage token limit
-        const contextHistory = existingHistory.slice(-10).map(entry => ({
+        // Prepare conversation context with all previous messages
+        const contextHistory = conversationHistory.map(entry => ({
             role: entry.sender === 'user' ? 'user' : 'model',
             parts: [{ text: entry.text }]
         }));
@@ -74,6 +118,9 @@ app.post('/chat', async (req, res) => {
         // Send message and get response
         const result = await chatSession.sendMessage(userMessage);
         const botResponse = result.response.text();
+
+        // Save conversation to Firestore
+        await saveConversationToFirestore(currentSessionId, userMessage, botResponse);
 
         return res.json({ 
             botResponse: botResponse,
