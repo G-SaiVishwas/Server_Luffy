@@ -1,55 +1,86 @@
 const express = require("express");
 const cors = require("cors");
-const { Firestore } = require("@google-cloud/firestore");
+const admin = require("firebase-admin");
+const { v4: uuidv4 } = require("uuid");
+const path = require("path");
+require("dotenv").config();
 
+// Initialize Express
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Initialize Firestore
-const firestore = new Firestore();
-
+// Middleware
 app.use(cors());
 app.use(express.json());
 
-async function getUserData(userId) {
-    const userDoc = firestore.collection("users").doc(userId);
-    const userSnapshot = await userDoc.get();
-    return userSnapshot.exists ? userSnapshot.data() : null;
+// Initialize Firebase Admin SDK
+const serviceAccountPath = process.env.GOOGLE_APPLICATION_CREDENTIALS || "./service-account-key.json";
+admin.initializeApp({
+    credential: admin.credential.cert(require(serviceAccountPath)),
+});
+
+// Firestore Database
+const db = admin.firestore();
+
+// Generate a unique session ID
+function generateSessionId() {
+    return uuidv4();
 }
 
-async function updateUserData(userId, data) {
-    const userDoc = firestore.collection("users").doc(userId);
-    await userDoc.set(data, { merge: true });
-}
-
+// Chat endpoint
 app.post("/chat", async (req, res) => {
-    const { userId, userMessage } = req.body;
+    const { userMessage, sessionId, conversationHistory, userInfo } = req.body;
 
-    if (!userId || !userMessage) {
-        return res.status(400).json({ error: "Invalid request data" });
+    // Generate or use existing session ID
+    const currentSessionId = sessionId || generateSessionId();
+
+    if (!userMessage) {
+        return res.status(400).json({ error: "No message provided" });
     }
 
     try {
-        let userData = await getUserData(userId);
+        const chatCollection = db.collection("chatSessions").doc(currentSessionId);
 
-        if (!userData) {
-            userData = { userId, name: null, conversationHistory: [] };
-            await updateUserData(userId, userData);
+        // Prepare system instruction
+        const systemInstruction = userInfo?.name
+            ? `You are a helpful and knowledgeable assistant. You are talking to ${userInfo.name}. Remember their name and context of previous conversations.`
+            : "You are a helpful and knowledgeable assistant. Respond thoughtfully.";
+
+        // Fetch conversation history
+        let existingHistory = [];
+        const doc = await chatCollection.get();
+        if (doc.exists) {
+            existingHistory = doc.data().conversationHistory || [];
         }
 
-        userData.conversationHistory.push({ sender: "user", text: userMessage });
+        // Append the new message to the history
+        const fullHistory = [...existingHistory, { sender: "user", text: userMessage }];
 
-        // Simulate a bot response
-        const botResponse = `Hello ${userData.name || "there"}, you said: ${userMessage}`;
-        userData.conversationHistory.push({ sender: "bot", text: botResponse });
+        // Here, you would integrate your AI model or logic for generating responses
+        const botResponse = `You said: "${userMessage}".`; // Replace with actual AI response logic
 
-        await updateUserData(userId, userData);
+        // Append bot's response
+        fullHistory.push({ sender: "bot", text: botResponse });
 
-        res.json({ botResponse });
+        // Save the updated history back to Firestore
+        await chatCollection.set({ conversationHistory: fullHistory }, { merge: true });
+
+        return res.json({
+            botResponse,
+            sessionId: currentSessionId,
+        });
     } catch (error) {
-        console.error("Error:", error);
-        res.status(500).json({ error: "Internal server error" });
+        console.error("Error in chat endpoint:", error.message);
+        return res.status(500).json({ error: "Internal server error", details: error.message });
     }
 });
 
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+// Root endpoint for health check
+app.get("/", (req, res) => {
+    res.send("Chatbot server is up and running!");
+});
+
+// Start the server
+app.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
+});
